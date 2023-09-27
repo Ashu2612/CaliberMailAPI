@@ -1,0 +1,6 @@
+@CaliberMailerAPI_HostAddress = http://localhost:5134
+
+GET {{CaliberMailerAPI_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
