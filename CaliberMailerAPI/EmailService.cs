@@ -1,24 +1,19 @@
-﻿using CaliberMailerAPI.Controllers;
-using Microsoft.Graph;
+﻿using Microsoft.Graph;
 using Microsoft.Identity.Client;
-using System.IO;
 using System.Net.Mail;
 using System.Net;
-using System.Security;
-using Microsoft.IdentityModel.Tokens;
 using CaliberMailerAPI.Models;
-using Microsoft.EntityFrameworkCore;
 using CaliberMailerAPI.Data;
 
 namespace CaliberMailerAPI
 {
     public class EmailService
     {
-        private readonly DataContext _context;
+        private readonly MailLogContext _context;
 
         private readonly IConfiguration _config;
 
-        public EmailService(IConfiguration config, DataContext context)
+        public EmailService(IConfiguration config, MailLogContext context)
         {
             _config = config;
             _context = context;
@@ -33,118 +28,165 @@ namespace CaliberMailerAPI
         /// <returns>A task representing the asynchronous operation.</returns>
         public async Task SendOfficeEmailAsync(MailsModel mailsModel, ProfilesModel profilesModel)
         {
-            var clientId = profilesModel.ClientId;
-            var clientSecret = profilesModel.ClientSecret;
-            var tenantId = profilesModel.TenantId;
-
-            var clientApplication = ConfidentialClientApplicationBuilder
-                .Create(clientId)
-                .WithClientSecret(clientSecret)
-                .WithAuthority(new Uri($"https://login.microsoftonline.com/{tenantId}"))
-                .Build();
-
-            var scopes = new[] { "https://graph.microsoft.com/.default" };
-            var authenticationResult = await clientApplication.AcquireTokenForClient(scopes).ExecuteAsync();
-
-            var graphServiceClient = new GraphServiceClient(
-                new DelegateAuthenticationProvider(requestMessage =>
-                {
-                    requestMessage.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authenticationResult.AccessToken);
-                    return Task.FromResult(0);
-                }));
-            List<Recipient> toMailList = new List<Recipient>();
-            char[] separator = { ';' };
-            foreach (string ToUser in mailsModel.EmailTo)
-            {
-                string[] strlist = ToUser.Split(separator);
-                for (int inti = 0; inti < strlist.Count(); inti++)
-                {
-                    Recipient toMailadd = new Recipient();
-                    EmailAddress toMailaddress = new EmailAddress();
-
-                    toMailaddress.Address = strlist[inti];
-                    toMailadd.EmailAddress = toMailaddress;
-                    toMailList.Add(toMailadd);
-                }
-            }
-
-            List<Recipient> CCMailList = new List<Recipient>();
-            if (mailsModel.CCMail.Count != 0)
-            {
-                foreach (string CCUser in mailsModel.CCMail)
-                {
-                    string[] CClist = CCUser.Split(separator);
-                    for (int inti = 0; inti < CClist.Count(); inti++)
-                    {
-                        Recipient CCMailadd = new Recipient();
-                        EmailAddress CCMailaddress = new EmailAddress();
-
-                        CCMailaddress.Address = CClist[inti];
-                        CCMailadd.EmailAddress = CCMailaddress;
-                        CCMailList.Add(CCMailadd);
-                    }
-                }
-            }
-            var message = new Microsoft.Graph.Message
-            {
-                Subject = mailsModel.Subject,
-                Body = new ItemBody
-                {
-                    ContentType = BodyType.Html,
-                    Content = mailsModel.MailBody
-                },
-
-                ToRecipients = toMailList,
-                CcRecipients = CCMailList,
-                Attachments = new MessageAttachmentsCollectionPage(),
-            };
             try
             {
-                if (mailsModel.AttachmentFileBytes.Count != 0)
-                {
-                    for (int i = 0; i < mailsModel.AttachmentFileBytes.Count; i++)
+                var clientId = profilesModel.ClientId;
+                var clientSecret = profilesModel.ClientSecret;
+                var tenantId = profilesModel.TenantId;
+
+                var clientApplication = ConfidentialClientApplicationBuilder
+                    .Create(clientId)
+                    .WithClientSecret(clientSecret)
+                    .WithAuthority(new Uri($"https://login.microsoftonline.com/{tenantId}"))
+                    .Build();
+
+                var scopes = new[] { "https://graph.microsoft.com/.default" };
+                var authenticationResult = await clientApplication.AcquireTokenForClient(scopes).ExecuteAsync();
+
+                var graphServiceClient = new GraphServiceClient(
+                    new DelegateAuthenticationProvider(requestMessage =>
                     {
-                        if (!string.IsNullOrEmpty(mailsModel.AttachmentFileNames[i]))
+                        requestMessage.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authenticationResult.AccessToken);
+                        return Task.FromResult(0);
+                    }));
+                List<Recipient> toMailList = new List<Recipient>();
+                char[] separator = { ';' };
+                foreach (string ToUser in mailsModel.EmailTo)
+                {
+                    string[] strlist = ToUser.Split(separator);
+                    for (int inti = 0; inti < strlist.Count(); inti++)
+                    {
+                        Recipient toMailadd = new Recipient();
+                        EmailAddress toMailaddress = new EmailAddress();
+
+                        toMailaddress.Address = strlist[inti];
+                        toMailadd.EmailAddress = toMailaddress;
+                        toMailList.Add(toMailadd);
+                    }
+                }
+
+                List<Recipient> CCMailList = new List<Recipient>();
+                if (mailsModel.CCMail.Count != 0)
+                {
+                    foreach (string CCUser in mailsModel.CCMail)
+                    {
+                        string[] CClist = CCUser.Split(separator);
+                        for (int inti = 0; inti < CClist.Count(); inti++)
                         {
-                            byte[] fileBytes = mailsModel.AttachmentFileBytes[i];
-                            string fileName = mailsModel.AttachmentFileNames[i];
+                            Recipient CCMailadd = new Recipient();
+                            EmailAddress CCMailaddress = new EmailAddress();
 
-                            string contentType = GetContentType(fileName);
-
-                            var attachment = new FileAttachment
-                            {
-                                Name = fileName,
-                                ContentBytes = fileBytes,
-                                ContentType = contentType,
-                            };
-
-                            message.Attachments.Add(attachment);
+                            CCMailaddress.Address = CClist[inti];
+                            CCMailadd.EmailAddress = CCMailaddress;
+                            CCMailList.Add(CCMailadd);
                         }
                     }
                 }
+                var message = new Microsoft.Graph.Message
+                {
+                    Subject = mailsModel.Subject,
+                    Body = new ItemBody
+                    {
+                        ContentType = BodyType.Html,
+                        Content = mailsModel.MailBody
+                    },
 
+                    ToRecipients = toMailList,
+                    CcRecipients = CCMailList,
+                    Attachments = new MessageAttachmentsCollectionPage(),
+                };
+                try
+                {
+                    if (mailsModel.AttachmentFileBytes.Count != 0)
+                    {
+                        for (int i = 0; i < mailsModel.AttachmentFileBytes.Count; i++)
+                        {
+                            if (!string.IsNullOrEmpty(mailsModel.AttachmentFileNames[i]))
+                            {
+                                byte[] fileBytes = mailsModel.AttachmentFileBytes[i];
+                                string fileName = mailsModel.AttachmentFileNames[i];
+
+                                string contentType = GetContentType(fileName);
+
+                                var attachment = new FileAttachment
+                                {
+                                    Name = fileName,
+                                    ContentBytes = fileBytes,
+                                    ContentType = contentType,
+                                };
+
+                                message.Attachments.Add(attachment);
+                            }
+                        }
+                    }
+
+                }
+                catch { }
+                try
+                {
+                    await graphServiceClient.Users[profilesModel.OfficeEmail].SendMail(message, true).Request().PostAsync();
+                    var mailLog = new MailLogModel
+                    {
+                        ProfileId = mailsModel.ProfileId,
+                        CCMail = mailsModel.CCMail,
+                        MailBody = mailsModel.MailBody,
+                        Subject = mailsModel.Subject,
+                        EmailTo = mailsModel.EmailTo,
+                        AttachmentFileBytes = mailsModel.AttachmentFileBytes,
+                        AttachmentFileNames = mailsModel.AttachmentFileNames,
+                        Status = "Success",
+                        Error = "No errors",
+                        DateTime = DateTime.Now
+                    };
+
+                    AddMailLog(mailLog);
+                }
+                catch (Exception ex)
+                {
+                    var mailLog = new MailLogModel
+                    {
+                        ProfileId = mailsModel.ProfileId,
+                        CCMail = mailsModel.CCMail,
+                        MailBody = mailsModel.MailBody,
+                        Subject = mailsModel.Subject,
+                        EmailTo = mailsModel.EmailTo,
+                        AttachmentFileBytes = mailsModel.AttachmentFileBytes,
+                        AttachmentFileNames = mailsModel.AttachmentFileNames,
+                        Status = "Failed",
+                        Error = ex.Message,
+                        DateTime = DateTime.Now
+                    };
+
+                    AddMailLog(mailLog);
+                }
             }
-            catch { }
-            try
+            catch (Exception ex)
             {
-                await graphServiceClient.Users[profilesModel.OfficeEmail].SendMail(message, true).Request().PostAsync();
-                _context.AD_MAIL_LOG.Add(new MailLogModel
+                var mailLog = new MailLogModel
                 {
                     ProfileId = mailsModel.ProfileId,
                     CCMail = mailsModel.CCMail,
-                    MailBody= mailsModel.MailBody,
-                    Subject= mailsModel.Subject,
-                    EmailTo=mailsModel.EmailTo,
+                    MailBody = mailsModel.MailBody,
+                    Subject = mailsModel.Subject,
+                    EmailTo = mailsModel.EmailTo,
                     AttachmentFileBytes = mailsModel.AttachmentFileBytes,
                     AttachmentFileNames = mailsModel.AttachmentFileNames,
-                    Status = "Success",
+                    Status = "Failed",
+                    Error = ex.Message,
                     DateTime = DateTime.Now
-                });
-                await _context.SaveChangesAsync();
-            }
-            catch { }
-        }
+                };
 
+                AddMailLog(mailLog);
+            }
+        }
+        void AddMailLog(MailLogModel mailLogModel)
+        {
+            using (var db = new MailLogContext())
+            {
+                db.AD_MAIL_LOG.Add(mailLogModel);
+                db.SaveChanges();
+            }
+        }
         public async Task SendSmtpEmailAsync(MailsModel mailsModel, ProfilesModel profilesModel)
         {
             try

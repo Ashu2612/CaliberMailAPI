@@ -21,6 +21,7 @@ namespace CaliberMailerAPI.Models
         [NotMapped]
         public List<string> AttachmentFileNames { get; set; } = new List<string>();
         public string Status { get; set; }
+        public string Error { get; set; }
         public DateTime DateTime { get; set; }
 
     }

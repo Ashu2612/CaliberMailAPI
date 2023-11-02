@@ -24,21 +24,6 @@ namespace CaliberMailerAPI.Controllers
         {
             try
             {
-                var mailLog = new MailLogModel
-                {
-                    ProfileId = emailRequest.ProfileId,
-                    CCMail = emailRequest.CCMail,
-                    MailBody = emailRequest.MailBody,
-                    Subject = emailRequest.Subject,
-                    EmailTo = emailRequest.EmailTo,
-                    AttachmentFileBytes = emailRequest.AttachmentFileBytes,
-                    AttachmentFileNames = emailRequest.AttachmentFileNames,
-                    Status = "Success",
-                    DateTime = DateTime.Now
-                };
-
-                AddMailLog(mailLog);
-
                 var profile = await _context.AD_MAIL_PROFILE.FirstOrDefaultAsync(p => p.ProfileId == emailRequest.ProfileId);
 
 
@@ -85,22 +70,12 @@ namespace CaliberMailerAPI.Controllers
 
                 _context.AD_MAIL_PROFILE.Add(profileData);
                 await _context.SaveChangesAsync();
-                return CreatedAtAction("GetProfile", new { id = profileData.ProfileId }, profileData);
+                var CreatedProfileData = await _context.AD_MAIL_PROFILE.FirstOrDefaultAsync(p => p.ProfileId == profile.ProfileId);
+                return CreatedProfileData;
             }
             catch (Exception ex)
             {
                 return BadRequest($"Failed to create profile: {ex.Message}");
-            }
-        }
-
-
-
-        void AddMailLog(MailLogModel mailLogModel)
-        {
-            using (var db = new DataContext())
-            {
-                db.AD_MAIL_LOG.Add(mailLogModel);
-                db.SaveChanges();
             }
         }
     }

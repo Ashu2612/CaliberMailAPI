@@ -1,10 +1,11 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations;
 
 namespace CaliberMailerAPI.Models
 {
-    [Keyless]
     public class ProfilesModel
     {
+        [Key]
         public int ProfileId { get; set; }
         public string? SMTPServer { get; set; }
         public int Port { get; set; }
