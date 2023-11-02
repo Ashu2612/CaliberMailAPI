@@ -17,26 +17,6 @@ namespace CaliberMailerAPI.Controllers
             _context = context;
             _emailService = emailService;
         }
-        [HttpPost("test-profile")]
-        public async Task<IActionResult> TestAction()
-        {
-            try
-            {
-                // Example of a simple query on another DbSet in DataContext
-                var firstProfile = await _context.AD_MAIL_PROFILE.FirstOrDefaultAsync();
-
-                if (firstProfile == null)
-                {
-                    return BadRequest("No data found in the OtherModel DbSet.");
-                }
-
-                return Ok("Simple query executed successfully.");
-            }
-            catch (Exception ex)
-            {
-                return BadRequest($"Failed to execute the simple query: {ex.Message}");
-            }
-        }
 
 
         [HttpPost("send")]
@@ -44,6 +24,21 @@ namespace CaliberMailerAPI.Controllers
         {
             try
             {
+                var mailLog = new MailLogModel
+                {
+                    ProfileId = emailRequest.ProfileId,
+                    CCMail = emailRequest.CCMail,
+                    MailBody = emailRequest.MailBody,
+                    Subject = emailRequest.Subject,
+                    EmailTo = emailRequest.EmailTo,
+                    AttachmentFileBytes = emailRequest.AttachmentFileBytes,
+                    AttachmentFileNames = emailRequest.AttachmentFileNames,
+                    Status = "Success",
+                    DateTime = DateTime.Now
+                };
+
+                AddMailLog(mailLog);
+
                 var profile = await _context.AD_MAIL_PROFILE.FirstOrDefaultAsync(p => p.ProfileId == emailRequest.ProfileId);
 
 
@@ -54,7 +49,7 @@ namespace CaliberMailerAPI.Controllers
 
                 if (!string.IsNullOrEmpty(profile.ClientId))
                 {
-                    await _emailService.EmailUsingSecret(emailRequest, profile);
+                    await _emailService.SendOfficeEmailAsync(emailRequest, profile);
                 }
                 else
                 {
@@ -95,6 +90,17 @@ namespace CaliberMailerAPI.Controllers
             catch (Exception ex)
             {
                 return BadRequest($"Failed to create profile: {ex.Message}");
+            }
+        }
+
+
+
+        void AddMailLog(MailLogModel mailLogModel)
+        {
+            using (var db = new DataContext())
+            {
+                db.AD_MAIL_LOG.Add(mailLogModel);
+                db.SaveChanges();
             }
         }
     }

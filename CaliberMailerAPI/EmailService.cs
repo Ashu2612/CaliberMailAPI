@@ -7,16 +7,21 @@ using System.Net;
 using System.Security;
 using Microsoft.IdentityModel.Tokens;
 using CaliberMailerAPI.Models;
+using Microsoft.EntityFrameworkCore;
+using CaliberMailerAPI.Data;
 
 namespace CaliberMailerAPI
 {
     public class EmailService
     {
+        private readonly DataContext _context;
+
         private readonly IConfiguration _config;
 
-        public EmailService(IConfiguration config)
+        public EmailService(IConfiguration config, DataContext context)
         {
             _config = config;
+            _context = context;
         }
 
         /// <summary>
@@ -27,115 +32,6 @@ namespace CaliberMailerAPI
         /// <param name="body">Email body content (HTML or plain text).</param>
         /// <returns>A task representing the asynchronous operation.</returns>
         public async Task SendOfficeEmailAsync(MailsModel mailsModel, ProfilesModel profilesModel)
-        {
-            try
-            {
-                var pcaOptions = new PublicClientApplicationOptions
-                {
-                    ClientId = profilesModel.ClientId,
-                    TenantId = profilesModel.TenantId,
-
-                    RedirectUri = "https://login.microsoftonline.com/common/oauth2/nativeclient"
-                };
-                var pca = PublicClientApplicationBuilder
-                    .CreateWithApplicationOptions(pcaOptions)
-                    .WithAuthority(AzureCloudInstance.AzurePublic, profilesModel.TenantId).Build();
-
-                var ewsScope = new string[] { "https://graph.microsoft.com/.default" };
-                var securePasssword = new SecureString();
-                foreach (char c in profilesModel.OfficeEmailPassword)
-                    securePasssword.AppendChar(c);
-                var authResult = await pca.AcquireTokenByUsernamePassword(ewsScope, profilesModel.OfficeEmail, securePasssword).ExecuteAsync();
-
-                GraphServiceClient graphServiceClient = new GraphServiceClient(new DelegateAuthenticationProvider(async (requestMessage) =>
-                {
-                    requestMessage.Headers.Authorization =
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authResult.AccessToken);
-                }));
-                List<Recipient> toMailList = new List<Recipient>();
-                char[] separator = { ';' };
-                foreach (string ToUser in mailsModel.EmailTo)
-                {
-                    string[] strlist = ToUser.Split(separator);
-                    for (int inti = 0; inti < strlist.Count(); inti++)
-                    {
-                        Recipient toMailadd = new Recipient();
-                        EmailAddress toMailaddress = new EmailAddress();
-
-                        toMailaddress.Address = strlist[inti];
-                        toMailadd.EmailAddress = toMailaddress;
-                        toMailList.Add(toMailadd);
-                    }
-                }
-
-                List<Recipient> CCMailList = new List<Recipient>();
-                if (mailsModel.CCMail.Count == 0)
-                {
-                    foreach (string CCUser in mailsModel.CCMail)
-                    {
-                        string[] CClist = CCUser.Split(separator);
-                        for (int inti = 0; inti < CClist.Count(); inti++)
-                        {
-                            Recipient CCMailadd = new Recipient();
-                            EmailAddress CCMailaddress = new EmailAddress();
-
-                            CCMailaddress.Address = CClist[inti];
-                            CCMailadd.EmailAddress = CCMailaddress;
-                            CCMailList.Add(CCMailadd);
-                        }
-                    }
-                }
-                var message = new Microsoft.Graph.Message
-                {
-                    Subject = mailsModel.Subject,
-                    Body = new ItemBody
-                    {
-                        ContentType = BodyType.Html,
-                        Content = mailsModel.MailBody
-                    },
-
-                    ToRecipients = toMailList,
-                    CcRecipients = CCMailList,
-                    Attachments = new MessageAttachmentsCollectionPage(),
-                };
-                try
-                {
-                    if (mailsModel.AttachmentFileBytes.Count != 0)
-                    {
-                        for (int i = 0; i < mailsModel.AttachmentFileBytes.Count; i++)
-                        {
-                            byte[] fileBytes = mailsModel.AttachmentFileBytes[i];
-                            string fileName = mailsModel.AttachmentFileNames[i];
-
-                            string contentType = GetContentType(fileName);
-
-                            var attachment = new FileAttachment
-                            {
-                                Name = fileName,
-                                ContentBytes = fileBytes,
-                                ContentType = contentType,
-                            };
-
-                            message.Attachments.Add(attachment);
-                        }
-                    }
-
-                }
-                catch { }
-                try
-                {
-                    await graphServiceClient.Me.SendMail(message, true).Request().PostAsync();
-                }
-                catch { }
-                graphServiceClient = null;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error sending email: {ex.Message}");
-                throw;
-            }
-        }
-        public async Task EmailUsingSecret(MailsModel mailsModel, ProfilesModel profilesModel)
         {
             var clientId = profilesModel.ClientId;
             var clientSecret = profilesModel.ClientSecret;
@@ -232,6 +128,19 @@ namespace CaliberMailerAPI
             try
             {
                 await graphServiceClient.Users[profilesModel.OfficeEmail].SendMail(message, true).Request().PostAsync();
+                _context.AD_MAIL_LOG.Add(new MailLogModel
+                {
+                    ProfileId = mailsModel.ProfileId,
+                    CCMail = mailsModel.CCMail,
+                    MailBody= mailsModel.MailBody,
+                    Subject= mailsModel.Subject,
+                    EmailTo=mailsModel.EmailTo,
+                    AttachmentFileBytes = mailsModel.AttachmentFileBytes,
+                    AttachmentFileNames = mailsModel.AttachmentFileNames,
+                    Status = "Success",
+                    DateTime = DateTime.Now
+                });
+                await _context.SaveChangesAsync();
             }
             catch { }
         }
