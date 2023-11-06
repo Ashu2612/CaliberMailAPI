@@ -24,23 +24,34 @@ namespace CaliberMailerAPI.Controllers
         {
             try
             {
+                // Fetch the profile based on the ProfileId
                 var profile = await _context.AD_MAIL_PROFILE.FirstOrDefaultAsync(p => p.ProfileId == emailRequest.ProfileId);
 
-
+                // Check if the profile exists
                 if (profile == null)
                 {
                     return BadRequest("Profile not found.");
                 }
 
-                if (!string.IsNullOrEmpty(profile.ClientId))
+                try
                 {
-                    await _emailService.SendOfficeEmailAsync(emailRequest, profile);
+                    // Send email based on the presence of ClientId in the profile
+                    if (!string.IsNullOrEmpty(profile.ClientId))
+                    {
+                        await _emailService.SendOfficeEmailAsync(emailRequest, profile);
+                    }
+                    else
+                    {
+                        await _emailService.SendSmtpEmailAsync(emailRequest, profile);
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    await _emailService.SendSmtpEmailAsync(emailRequest, profile);
+                    await LogMailAsync(emailRequest, "Failed", ex.Message);
+                    return BadRequest($"Failed to send email: {ex.Message}");
                 }
 
+                await LogMailAsync(emailRequest, "Successful", "No errors");
                 return Ok("Email sent successfully.");
             }
             catch (Exception ex)
@@ -48,6 +59,35 @@ namespace CaliberMailerAPI.Controllers
                 return BadRequest($"Failed to send email: {ex.Message}");
             }
         }
+
+        private async Task LogMailAsync(MailsModel emailRequest, string status, string error)
+        {
+            // Convert lists to strings
+            string ccMail = string.Join(",", emailRequest.CCMail);
+            string toMail = string.Join(",", emailRequest.EmailTo);
+            string attachmentFileNames = string.Join(",", emailRequest.AttachmentFileNames);
+            List<string> attachmentFileBytesBase64 = emailRequest.AttachmentFileBytes.Select(b => Convert.ToBase64String(b)).ToList();
+
+            // Create a new MailLogModel object
+            var mailLog = new MailLogModel
+            {
+                ProfileId = emailRequest.ProfileId,
+                EmailTo = toMail,
+                Subject = emailRequest.Subject,
+                MailBody = emailRequest.MailBody,
+                CCMail = ccMail,
+                AttachmentFileBytes = string.Join(",", attachmentFileBytesBase64),
+                AttachmentFileNames = attachmentFileNames,
+                Status = status,
+                Error = error,
+                DateTime = DateTime.Now
+            };
+
+            // Add the new MailLogModel to the context and save changes
+            _context.AD_MAIL_LOG.Add(mailLog);
+            await _context.SaveChangesAsync();
+        }
+
 
 
         [HttpPost("create-profile")]
